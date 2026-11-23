@@ -66,3 +66,17 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Build & CMake
+build/
+Builds/
+cmake-build-*/
+JuceLibraryCode/
+
+# macOS & Windows Systemdateien
+.DS_Store
+Thumbs.db
+
+# IDE / VS Code
+.vscode/
+*.user

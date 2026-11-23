@@ -1,0 +1,45 @@
+name: Build Cyberverb X1 Plugins
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Linux-Abhängigkeiten & pkg-config für FreeType
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libjack-jackd2-dev \
+            ladspa-sdk freeglut3-dev g++ libx11-dev libxcomposite-dev \
+            libxcursor-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libsysfs-dev libgl1-mesa-dev libglu1-mesa-dev libfreetype6-dev \
+            libfontconfig1-dev libcurl4-openssl-dev libgtk-3-dev
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Plugin
+        run: cmake --build build --config Release
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberverbX1-${{ matrix.os }}
+          path: build/CyberverbX1_artefacts/Release/VST3/
