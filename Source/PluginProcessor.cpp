@@ -430,12 +430,23 @@ void CyberverbX1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         }
     }
 
-    // Input Peak messen
-    const float inPeak = juce::jmax (buffer.getMagnitude (0, 0, numSamples), buffer.getMagnitude (1, 0, numSamples));
-    float prevIn = inputPeakLevel.load (std::memory_order_relaxed);
-    while (inPeak > prevIn && ! inputPeakLevel.compare_exchange_weak (prevIn, inPeak, std::memory_order_relaxed)) {}
+    // Input Peak L & R messen
+    const float inPeakL = buffer.getMagnitude (0, 0, numSamples);
+    const float inPeakR = buffer.getMagnitude (1, 0, numSamples);
+    const float inPeak  = juce::jmax (inPeakL, inPeakR);
 
-    if (params.bypass->load() > 0.5f)
+    float prevInL = inputPeakL.load (std::memory_order_relaxed);
+    while (inPeakL > prevInL && ! inputPeakL.compare_exchange_weak (prevInL, inPeakL, std::memory_order_relaxed)) {}
+
+    float prevInR = inputPeakR.load (std::memory_order_relaxed);
+    while (inPeakR > prevInR && ! inputPeakR.compare_exchange_weak (prevInR, inPeakR, std::memory_order_relaxed)) {}
+
+    const bool isBypassed = (params.bypass->load() > 0.5f);
+    const bool tailsOn    = tailsEnabled.load (std::memory_order_acquire);
+    const bool muteInput  = muteInEnabled.load (std::memory_order_acquire) || (isBypassed && tailsOn);
+
+    // Bei hartem Bypass (TAILS = OFF) sofort durchschleifen
+    if (isBypassed && ! tailsOn)
         return;
 
     const float sr    = static_cast<float> (currentSampleRateHz.load());
@@ -564,6 +575,10 @@ void CyberverbX1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     juce::AudioBuffer<float> dryBuffer (2, numSamples);
     dryBuffer.copyFrom (0, 0, buffer, 0, 0, numSamples);
     dryBuffer.copyFrom (1, 0, buffer, 1, 0, numSamples);
+
+    // Bei aktivem MUTE IN (oder Bypass mit TAILS = ON) nur den Eingang in die FX-Engines kappen
+    if (muteInput)
+        buffer.clear();
 
     juce::AudioBuffer<float> bufA (2, numSamples);
     juce::AudioBuffer<float> bufB (2, numSamples);
@@ -764,6 +779,9 @@ void CyberverbX1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     const auto* dL = dryBuffer.getReadPointer (0);
     const auto* dR = dryBuffer.getReadPointer (1);
 
+    const float effDryGain = isBypassed ? 1.0f : dryGain;
+    const float effOutGain = isBypassed ? 1.0f : outGain;
+
     for (int i = 0; i < numSamples; ++i)
     {
         const float mid  = 0.5f * (outL[i] + outR[i]);
@@ -772,8 +790,8 @@ void CyberverbX1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         const float wL = (mid + side) * dynamicWetScalar;
         const float wR = (mid - side) * dynamicWetScalar;
 
-        outL[i] = (dL[i] * dryGain + wL) * outGain;
-        outR[i] = (dR[i] * dryGain + wR) * outGain;
+        outL[i] = (dL[i] * effDryGain + wL) * effOutGain;
+        outR[i] = (dR[i] * effDryGain + wR) * effOutGain;
     }
 
     // Output-Peaks & Scope-Ringbuffer
@@ -785,19 +803,6 @@ void CyberverbX1AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
 
     float prevR = outputPeakR.load (std::memory_order_relaxed);
     while (peakR > prevR && ! outputPeakR.compare_exchange_weak (prevR, peakR, std::memory_order_relaxed)) {}
-
-    int writeIdx = scopeWritePos.load (std::memory_order_relaxed);
-    for (int i = 0; i < numSamples; ++i)
-    {
-        if (++scopeDecimator >= 4)
-        {
-            scopeDecimator = 0;
-            const float mono = 0.5f * (outL[i] + outR[i]);
-            scopeRingBuffer[static_cast<size_t> (writeIdx)].store (mono, std::memory_order_relaxed);
-            writeIdx = (writeIdx + 1) % scopeBufferSize;
-        }
-    }
-    scopeWritePos.store (writeIdx, std::memory_order_release);
 }
 
 // ==============================================================================
@@ -1139,6 +1144,8 @@ void CyberverbX1AudioProcessor::getStateInformation (juce::MemoryBlock& destData
         xml->setAttribute ("mixLockEnabled", isMixLockEnabled());
         xml->setAttribute ("globalSyncEnabled", isGlobalSyncEnabled());
         xml->setAttribute ("midiPickupEnabled", isMidiPickupEnabled());
+        xml->setAttribute ("tailsEnabled", isTailsEnabled());
+        xml->setAttribute ("linkABEnabled", isLinkABEnabled());
 
         for (int k = 0; k < numAssignKnobs; ++k)
         {
@@ -1159,6 +1166,8 @@ void CyberverbX1AudioProcessor::setStateInformation (const void* data, int sizeI
         setMixLockEnabled (xmlState->getBoolAttribute ("mixLockEnabled", false));
         setGlobalSyncEnabled (xmlState->getBoolAttribute ("globalSyncEnabled", false));
         setMidiPickupEnabled (xmlState->getBoolAttribute ("midiPickupEnabled", true));
+        setTailsEnabled (xmlState->getBoolAttribute ("tailsEnabled", true));
+        setLinkABEnabled (xmlState->getBoolAttribute ("linkABEnabled", false));
 
         for (int k = 0; k < numAssignKnobs; ++k)
         {

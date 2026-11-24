@@ -182,10 +182,9 @@ private:
     bool showLcdNotify = false;
     int lcdNotifyTicks = 0;
 
-    BottomStripMode bottomStripMode = BottomStripMode::Oscilloscope;
+    // BottomStripMode bottomStripMode = BottomStripMode::Oscilloscope;
     juce::Rectangle<float> bottomStripBounds;
-    juce::Rectangle<float> scopeClickArea;
-    std::array<float, CyberverbX1AudioProcessor::scopeBufferSize> scopeCache {};
+    // juce::Rectangle<float> scopeClickArea;
     float smoothedLevelL   = 0.0f;
     float smoothedLevelR   = 0.0f;
     float peakHoldL        = 0.0f;
@@ -193,6 +192,12 @@ private:
     int peakHoldTicksL     = 0;
     int peakHoldTicksR     = 0;
     int midiLedHoldTicks   = 0;
+    float smoothedInL      = 0.0f;
+    float smoothedInR      = 0.0f;
+    float peakHoldInL      = 0.0f;
+    float peakHoldInR      = 0.0f;
+    int peakHoldTicksInL   = 0;
+    int peakHoldTicksInR   = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CyberverbX1AudioProcessorEditor)
 };

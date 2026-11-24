@@ -175,6 +175,16 @@ CyberverbX1AudioProcessorEditor::CyberverbX1AudioProcessorEditor (CyberverbX1Aud
 
         knob.onValueChange = [this, i, pID, lbl]
         {
+            if (i >= 2 && audioProcessor.isLinkABEnabled())
+            {
+                const juce::String otherID = pID.startsWith ("a_")
+                                                 ? ("b_" + pID.substring (2))
+                                                 : ("a_" + pID.substring (2));
+                if (auto* srcP = audioProcessor.apvts.getParameter (pID))
+                    if (auto* dstP = audioProcessor.apvts.getParameter (otherID))
+                        if (std::abs (dstP->getValue() - srcP->getValue()) > 0.0005f)
+                            dstP->setValueNotifyingHost (srcP->getValue());
+            }
             const double v = rightKnobs[i].getValue();
             setKeypadTarget (pID, lbl);
 
@@ -287,9 +297,13 @@ void CyberverbX1AudioProcessorEditor::handleSystemButton (int buttonIndex)
             break;
         }
 
-        case 3: // SYSTEM
-            showSettingsMenu();
+        case 3: // TAILS
+        {
+            const bool next = ! audioProcessor.isTailsEnabled();
+            audioProcessor.setTailsEnabled (next);
+            triggerLcdNotification ("BYPASS SPILLOVER", next ? "TAILS ON" : "HARD BYPASS");
             break;
+        }
 
         default:
             break;
@@ -313,37 +327,37 @@ void CyberverbX1AudioProcessorEditor::handleMatrixButton (int buttonIndex)
     {
         case 0: toggleBoolParam ("a_on", "SPACE ENGINE A"); break;
         case 1: toggleBoolParam ("b_on", "SPACE ENGINE B"); break;
-        case 2: // SOLO A
-            if (auto* pA = audioProcessor.apvts.getParameter ("a_on"))
-                if (auto* pB = audioProcessor.apvts.getParameter ("b_on"))
-                {
-                    const bool isAlreadySoloA = (pA->getValue() > 0.5f && pB->getValue() < 0.5f);
-                    pA->setValueNotifyingHost (1.0f);
-                    pB->setValueNotifyingHost (isAlreadySoloA ? 1.0f : 0.0f);
-                    triggerLcdNotification ("SOLO A", isAlreadySoloA ? "OFF (A+B ACTIVE)" : "ACTIVE");
-                }
+
+        case 2: // LINK A/B
+        {
+            const bool next = ! audioProcessor.isLinkABEnabled();
+            audioProcessor.setLinkABEnabled (next);
+            triggerLcdNotification ("ENGINE LINK A/B", next ? "LINKED" : "INDEPENDENT");
             break;
-        case 3: // SOLO B
-            if (auto* pA = audioProcessor.apvts.getParameter ("a_on"))
-                if (auto* pB = audioProcessor.apvts.getParameter ("b_on"))
-                {
-                    const bool isAlreadySoloB = (pB->getValue() > 0.5f && pA->getValue() < 0.5f);
-                    pB->setValueNotifyingHost (1.0f);
-                    pA->setValueNotifyingHost (isAlreadySoloB ? 1.0f : 0.0f);
-                    triggerLcdNotification ("SOLO B", isAlreadySoloB ? "OFF (A+B ACTIVE)" : "ACTIVE");
-                }
+        }
+
+        case 3: // MUTE IN
+        {
+            const bool next = ! audioProcessor.isMuteInEnabled();
+            audioProcessor.setMuteInEnabled (next);
+            triggerLcdNotification ("INPUT SEND", next ? "MUTED (TAILS RING)" : "ACTIVE");
             break;
+        }
+
         case 4: // COPY A>B
             audioProcessor.copySpaceParameters (1, 2);
             triggerLcdNotification ("SPACE COPY", "A -> B COPIED");
             break;
+
         case 5: // SWAP A/B
             audioProcessor.swapSpaceParameters();
             triggerLcdNotification ("SPACE SWAP", "A <-> B SWAPPED");
             break;
+
         case 6: // FREEZE
             toggleBoolParam ("sys_freeze", "INFINITE FREEZE");
             break;
+
         case 7: // RAND
         {
             const int target = (currentTab == ActiveTab::SpaceB) ? 2 : 1;
@@ -351,6 +365,7 @@ void CyberverbX1AudioProcessorEditor::handleMatrixButton (int buttonIndex)
             triggerLcdNotification (target == 1 ? "RANDOMIZE A" : "RANDOMIZE B", "NEW SPACE GENERATED");
             break;
         }
+
         default: break;
     }
     repaint();
@@ -569,6 +584,8 @@ void CyberverbX1AudioProcessorEditor::handleFlushClick()
 {
     audioProcessor.flushAudioTails();
     smoothedLevelL = smoothedLevelR = peakHoldL = peakHoldR = 0.0f;
+    smoothedInL = smoothedInR = peakHoldInL = peakHoldInR = 0.0f;
+    smoothedLevelL = smoothedLevelR = peakHoldL = peakHoldR = 0.0f;
     triggerLcdNotification ("BUFFER FLUSH", "ALL TAILS CLEARED");
 }
 
@@ -592,6 +609,19 @@ void CyberverbX1AudioProcessorEditor::timerCallback()
 
     if (showLcdNotify && lcdNotifyTicks > 0 && ! keypadActive)
         if (--lcdNotifyTicks == 0) showLcdNotify = false;
+    
+    const float inL = audioProcessor.consumeInputPeakLeft();
+    const float inR = audioProcessor.consumeInputPeakRight();
+    smoothedInL = (inL > smoothedInL) ? inL : (smoothedInL * 0.84f);
+    smoothedInR = (inR > smoothedInR) ? inR : (smoothedInR * 0.84f);
+
+    if (inL >= peakHoldInL) { peakHoldInL = inL; peakHoldTicksInL = 36; }
+    else if (peakHoldTicksInL > 0) --peakHoldTicksInL;
+    else peakHoldInL *= 0.90f;
+
+    if (inR >= peakHoldInR) { peakHoldInR = inR; peakHoldTicksInR = 36; }
+    else if (peakHoldTicksInR > 0) --peakHoldTicksInR;
+    else peakHoldInR *= 0.90f;
 
     const float pL = audioProcessor.consumePeakLeft();
     const float pR = audioProcessor.consumePeakRight();
@@ -608,8 +638,6 @@ void CyberverbX1AudioProcessorEditor::timerCallback()
 
     if (audioProcessor.consumeMidiActivity()) midiLedHoldTicks = 6;
     else if (midiLedHoldTicks > 0) --midiLedHoldTicks;
-
-    audioProcessor.copyScopeSamples (scopeCache);
 
     if (! bottomStripBounds.isEmpty())
         repaint (bottomStripBounds.toNearestInt().expanded (2));
@@ -884,12 +912,14 @@ void CyberverbX1AudioProcessorEditor::resized()
 
 void CyberverbX1AudioProcessorEditor::mouseDown (const juce::MouseEvent& event)
 {
+    /*
     if (event.mods.isLeftButtonDown() && scopeClickArea.contains (event.position))
     {
         bottomStripMode = static_cast<BottomStripMode> ((static_cast<int> (bottomStripMode) + 1) % 2);
         repaint (bottomStripBounds.toNearestInt().expanded (2));
         return;
     }
+    */
 
     if (event.mods.isRightButtonDown())
     {

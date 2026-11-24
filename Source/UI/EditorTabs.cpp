@@ -19,6 +19,16 @@ void CyberverbX1AudioProcessorEditor::initTabControls()
 
         slider.onValueChange = [this, &slider, paramID, title, fmt]
         {
+            if (audioProcessor.isLinkABEnabled() && (paramID.startsWith ("a_") || paramID.startsWith ("b_")))
+            {
+                const juce::String otherID = paramID.startsWith ("a_")
+                                                 ? ("b_" + paramID.substring (2))
+                                                 : ("a_" + paramID.substring (2));
+                if (auto* srcP = audioProcessor.apvts.getParameter (paramID))
+                    if (auto* dstP = audioProcessor.apvts.getParameter (otherID))
+                        if (std::abs (dstP->getValue() - srcP->getValue()) > 0.0005f)
+                            dstP->setValueNotifyingHost (srcP->getValue());
+            }
             setKeypadTarget (paramID, title);
             triggerLcdNotification (title, fmt (slider.getValue()));
         };

@@ -81,18 +81,18 @@ void CyberverbX1AudioProcessorEditor::drawSystemButtonLeds (juce::Graphics& g, f
         audioProcessor.apvts.getRawParameterValue ("sys_bypass")->load() > 0.5f,
         audioProcessor.isMixLockEnabled(),
         audioProcessor.isGlobalSyncEnabled(),
-        false
+        audioProcessor.isTailsEnabled()
     };
 
     const juce::Colour cols[4] = {
-        juce::Colour::fromRGB (255, 65, 65), // Rot für BYPASS
-        CyberverbColours::engineB,           // Gelb/Bernstein für MIX LOCK
-        CyberverbColours::engineA,           // Cyan/Orange für SYNC
-        CyberverbColours::engineA
+        juce::Colour::fromRGB (255, 65, 65), // Rot: BYPASS
+        CyberverbColours::engineB,           // Gelb/Bernstein: MIX LOCK
+        CyberverbColours::engineA,           // Cyan/Orange: SYNC
+        CyberverbColours::engineA            // Cyan/Orange: TAILS
     };
 
     const float r       = 0.0042f * w;
-    const float yOffset = 0.0110f * h;
+    const float yOffset = 0.0200f * h; // Exakt gleicher Abstand wie beim FREEZE-Button
 
     for (size_t i = 0; i < 4; ++i)
     {
@@ -113,7 +113,6 @@ void CyberverbX1AudioProcessorEditor::drawSystemButtonLeds (juce::Graphics& g, f
         }
         else
         {
-            // Deaktivierte LED als dunkler Sockel
             g.setColour (juce::Colour::fromRGB (14, 20, 28).withAlpha (0.85f));
             g.fillEllipse (cx - r, cy - r, r * 2.0f, r * 2.0f);
             g.setColour (juce::Colour::fromRGB (45, 55, 70).withAlpha (0.6f));
@@ -126,20 +125,21 @@ void CyberverbX1AudioProcessorEditor::drawMatrixLeds (juce::Graphics& g, float w
 {
     constexpr float ledX[4] = { 0.4976f, 0.5369f, 0.5762f, 0.6173f };
     const float topLedY = 0.6140f * h;
-    //const float botLedY = 0.8620f * h; // Direkt unterhalb der unteren Button-Reihe
     const float botLedY = matrixButtons[6].getBounds().toFloat().getBottom() + 0.0160f * h;
     const float r = 0.0042f * w;
 
-    const bool aOn = audioProcessor.apvts.getRawParameterValue ("a_on")->load() > 0.5f;
-    const bool bOn = audioProcessor.apvts.getRawParameterValue ("b_on")->load() > 0.5f;
-    const bool frz = audioProcessor.apvts.getRawParameterValue ("sys_freeze")->load() > 0.5f;
+    const bool aOn    = audioProcessor.apvts.getRawParameterValue ("a_on")->load() > 0.5f;
+    const bool bOn    = audioProcessor.apvts.getRawParameterValue ("b_on")->load() > 0.5f;
+    const bool linkAB = audioProcessor.isLinkABEnabled();
+    const bool muteIn = audioProcessor.isMuteInEnabled();
+    const bool frz    = audioProcessor.apvts.getRawParameterValue ("sys_freeze")->load() > 0.5f;
 
-    const bool topActive[4]    = { aOn, bOn, (aOn && ! bOn), (bOn && ! aOn) };
+    const bool topActive[4]    = { aOn, bOn, linkAB, muteIn };
     const juce::Colour cols[4] = {
-        CyberverbColours::engineA,
-        CyberverbColours::engineB,
-        CyberverbColours::engineA,
-        CyberverbColours::engineB
+        CyberverbColours::engineA,           // ON A
+        CyberverbColours::engineB,           // ON B
+        CyberverbColours::engineB,           // LINK A/B
+        juce::Colour::fromRGB (255, 65, 65)  // MUTE IN (Warn-Rot)
     };
 
     auto drawSingleLed = [&] (float cx, float cy, bool isOn, juce::Colour col)
@@ -164,12 +164,10 @@ void CyberverbX1AudioProcessorEditor::drawMatrixLeds (juce::Graphics& g, float w
         }
     };
 
-    // Obere 4 LEDs
     for (int i = 0; i < 4; ++i)
         drawSingleLed (ledX[i] * w, topLedY, topActive[i], cols[i]);
 
-    // Untere LED nur unter dem FREEZE-Button (Spalte 2)
-    drawSingleLed (ledX[2] * w, botLedY, frz, cols[2]);
+    drawSingleLed (ledX[2] * w, botLedY, frz, CyberverbColours::engineB);
 }
 
 void CyberverbX1AudioProcessorEditor::drawBottomStatusStrip (juce::Graphics& g, juce::Rectangle<float> stripBounds)
@@ -180,79 +178,94 @@ void CyberverbX1AudioProcessorEditor::drawBottomStatusStrip (juce::Graphics& g, 
     auto area = stripBounds.reduced (6.0f, 3.0f);
     const float totalW = area.getWidth();
 
-    // Sektion 1: Routing & Engine Status
-    auto sec1 = area.removeFromLeft (totalW * 0.24f);
+    auto drawDivider = [&g, colA] (float x, float top, float bottom)
+    {
+        g.setColour (colA.withAlpha (0.22f));
+        g.drawVerticalLine (juce::roundToInt (x), top + 2.0f, bottom - 2.0f);
+    };
+
+    // Sektion 1 (22%): Routing & Mix-Lock Status
+    auto sec1 = area.removeFromLeft (totalW * 0.22f);
+    drawDivider (sec1.getRight(), area.getY(), area.getBottom());
+    sec1.removeFromRight (6.0f);
+
     g.setColour (colA);
     g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
     g.drawText ("MODE // " + routingControls.sysModeBox.getText().toUpperCase(),
-                sec1.removeFromTop (sec1.getHeight() * 0.5f), juce::Justification::centredLeft);
+                sec1.removeFromTop (sec1.getHeight() * 0.5f), juce::Justification::centredLeft, true);
 
     g.setColour (colB);
     g.drawText (audioProcessor.isMixLockEnabled() ? "MIX LOCK // ON" : "MIX LOCK // OFF",
-                sec1, juce::Justification::centredLeft);
+                sec1, juce::Justification::centredLeft, true);
 
-    // Sektion 2: Echtzeit-Oszilloskop / Morph-Vektor
-    auto sec2 = area.removeFromLeft (totalW * 0.32f).reduced (6.0f, 0.0f);
-    scopeClickArea = sec2;
-    g.setColour (juce::Colour::fromRGB (8, 11, 16));
-    g.fillRoundedRectangle (sec2, 3.0f);
-    g.setColour (colA.withAlpha (0.30f));
-    g.drawRoundedRectangle (sec2, 3.0f, 1.0f);
-
-    if (bottomStripMode == BottomStripMode::Oscilloscope)
+    // Hilfsfunktion für ein Stereo-LED-Meter-Paar (IN oder OUT)
+    auto drawStereoMeterBlock = [&] (juce::Rectangle<float> box,
+                                     const char* groupTag,
+                                     juce::Colour tagCol,
+                                     float lvlL, float holdL,
+                                     float lvlR, float holdR)
     {
-        const auto inner = sec2.reduced (3.0f, 2.0f);
-        juce::Path wave;
-        for (int i = 0; i < CyberverbX1AudioProcessor::scopeBufferSize; ++i)
-        {
-            const float nx = static_cast<float> (i) / static_cast<float> (CyberverbX1AudioProcessor::scopeBufferSize - 1);
-            const float sv = juce::jlimit (-1.0f, 1.0f, scopeCache[static_cast<size_t> (i)] * 1.4f);
-            const float px = inner.getX() + nx * inner.getWidth();
-            const float py = inner.getCentreY() - sv * (inner.getHeight() * 0.45f);
-            if (i == 0) wave.startNewSubPath (px, py); else wave.lineTo (px, py);
-        }
-        g.setColour (colA);
-        g.strokePath (wave, juce::PathStrokeType (1.4f));
-    }
-    else
-    {
-        const float m = audioProcessor.getLiveEffectiveMorph();
-        auto bar = sec2.reduced (6.0f, 6.0f);
-        const float split = bar.getX() + bar.getWidth() * (1.0f - m);
-        g.setColour (colA.withAlpha (0.8f)); g.fillRoundedRectangle (bar.withRight (split), 2.0f);
-        g.setColour (colB.withAlpha (0.8f)); g.fillRoundedRectangle (bar.withLeft (split), 2.0f);
-    }
-
-    // Sektion 3: Stereo Output Peak Meter
-    auto sec3 = area.removeFromLeft (totalW * 0.26f).reduced (6.0f, 1.0f);
-    auto drawMeter = [&] (juce::Rectangle<float> row, const char* lbl, float lvl, float hold)
-    {
-        g.setColour (CyberverbColours::textPrimary);
+        auto tagRect = box.removeFromLeft (28.0f);
+        g.setColour (tagCol);
         g.setFont (juce::FontOptions (10.5f, juce::Font::bold));
-        g.drawText (lbl, row.removeFromLeft (14.0f), juce::Justification::centredLeft);
-        auto mr = row.reduced (0.0f, 2.5f);
-        g.setColour (juce::Colour::fromRGB (8, 11, 16));
-        g.fillRoundedRectangle (mr, 2.0f);
-        juce::ColourGradient grad (colA, mr.getX(), mr.getCentreY(), colB, mr.getRight(), mr.getCentreY(), false);
-        g.setGradientFill (grad);
-        g.fillRoundedRectangle (mr.withWidth (mr.getWidth() * juce::jlimit (0.0f, 1.0f, lvl)), 2.0f);
-        if (hold > 0.01f)
-        {
-            g.setColour (juce::Colours::white);
-            g.fillRect (mr.getX() + mr.getWidth() * juce::jlimit (0.0f, 1.0f, hold) - 1.0f, mr.getY(), 2.0f, mr.getHeight());
-        }
-    };
-    drawMeter (sec3.removeFromTop (sec3.getHeight() * 0.5f), "L", smoothedLevelL, peakHoldL);
-    drawMeter (sec3, "R", smoothedLevelR, peakHoldR);
+        g.drawText (groupTag, tagRect, juce::Justification::centredLeft);
 
-    // Sektion 4: Sample Rate & DSP Online
+        auto drawSingleBar = [&] (juce::Rectangle<float> row, const char* chLbl, float lvl, float hold)
+        {
+            g.setColour (CyberverbColours::textPrimary.withAlpha (0.75f));
+            g.setFont (juce::FontOptions (9.5f, juce::Font::bold));
+            g.drawText (chLbl, row.removeFromLeft (11.0f), juce::Justification::centredLeft);
+
+            auto mr = row.reduced (0.0f, 2.5f);
+            g.setColour (juce::Colour::fromRGB (8, 11, 16));
+            g.fillRoundedRectangle (mr, 2.0f);
+            g.setColour (juce::Colour::fromRGB (35, 45, 60).withAlpha (0.7f));
+            g.drawRoundedRectangle (mr, 2.0f, 0.8f);
+
+            const float clampedLvl  = juce::jlimit (0.0f, 1.0f, lvl);
+            const float clampedHold = juce::jlimit (0.0f, 1.0f, hold);
+
+            if (clampedLvl > 0.002f)
+            {
+                juce::ColourGradient grad (colA, mr.getX(), mr.getCentreY(),
+                                           colB, mr.getRight(), mr.getCentreY(), false);
+                grad.addColour (0.88, juce::Colour::fromRGB (255, 65, 65));
+                g.setGradientFill (grad);
+                g.fillRoundedRectangle (mr.withWidth (mr.getWidth() * clampedLvl), 2.0f);
+            }
+
+            if (clampedHold > 0.01f)
+            {
+                const float hx = mr.getX() + mr.getWidth() * clampedHold;
+                g.setColour (clampedHold > 0.96f ? juce::Colour::fromRGB (255, 65, 65) : juce::Colours::white);
+                g.fillRect (hx - 1.0f, mr.getY() + 1.0f, 2.0f, mr.getHeight() - 2.0f);
+            }
+        };
+
+        auto topRow = box.removeFromTop (box.getHeight() * 0.5f);
+        drawSingleBar (topRow, "L", lvlL, holdL);
+        drawSingleBar (box,    "R", lvlR, holdR);
+    };
+
+    // Sektion 2 (30%): INPUT L/R Meter
+    auto sec2 = area.removeFromLeft (totalW * 0.30f);
+    drawDivider (sec2.getRight(), area.getY(), area.getBottom());
+    drawStereoMeterBlock (sec2.reduced (6.0f, 1.0f), "IN", colA, smoothedInL, peakHoldInL, smoothedInR, peakHoldInR);
+
+    // Sektion 3 (30%): OUTPUT L/R Meter
+    auto sec3 = area.removeFromLeft (totalW * 0.30f);
+    drawDivider (sec3.getRight(), area.getY(), area.getBottom());
+    drawStereoMeterBlock (sec3.reduced (6.0f, 1.0f), "OUT", colB, smoothedLevelL, peakHoldL, smoothedLevelR, peakHoldR);
+
+    // Sektion 4 (Rest 18%): Sample Rate & DSP Status
     auto sec4 = area.withTrimmedLeft (6.0f);
     g.setColour (colA);
     g.setFont (juce::FontOptions (11.0f, juce::Font::bold));
     g.drawText (juce::String::formatted ("%.1f KHZ", audioProcessor.getCurrentSampleRateHz() / 1000.0),
-                sec4.removeFromTop (sec4.getHeight() * 0.5f), juce::Justification::centredRight);
+                sec4.removeFromTop (sec4.getHeight() * 0.5f), juce::Justification::centredRight, true);
+
     g.setColour (colB);
-    g.drawText ("DSP // ONLINE", sec4, juce::Justification::centredRight);
+    g.drawText ("DSP // ONLINE", sec4, juce::Justification::centredRight, true);
 }
 
 void CyberverbX1AudioProcessorEditor::drawRoutingPanels (juce::Graphics& g, juce::Rectangle<float> leftBounds, juce::Rectangle<float> rightBounds)

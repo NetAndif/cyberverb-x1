@@ -7,7 +7,6 @@
 class CyberverbX1AudioProcessor : public juce::AudioProcessor
 {
 public:
-    static constexpr int scopeBufferSize = 256;
     static constexpr int numAssignKnobs  = 8; // Rechte 8 Engine-Regler (Decay/Size/Damp/DlyFeed A & B)
 
     CyberverbX1AudioProcessor();
@@ -191,8 +190,18 @@ public:
     void setGlobalSyncEnabled (bool b) noexcept { globalSyncEnabled.store (b, std::memory_order_release); }
     bool isGlobalSyncEnabled() const noexcept   { return globalSyncEnabled.load (std::memory_order_acquire); }
 
+    void setTailsEnabled (bool b) noexcept { tailsEnabled.store (b, std::memory_order_release); }
+    bool isTailsEnabled() const noexcept   { return tailsEnabled.load (std::memory_order_acquire); }
+
+    void setLinkABEnabled (bool b) noexcept { linkABEnabled.store (b, std::memory_order_release); }
+    bool isLinkABEnabled() const noexcept   { return linkABEnabled.load (std::memory_order_acquire); }
+
+    void setMuteInEnabled (bool b) noexcept { muteInEnabled.store (b, std::memory_order_release); }
+    bool isMuteInEnabled() const noexcept   { return muteInEnabled.load (std::memory_order_acquire); }
+
     // Telemetrie für UI
-    float consumeInputPeak() noexcept   { return inputPeakLevel.exchange (0.0f); }
+    float consumeInputPeakLeft() noexcept  { return inputPeakL.exchange (0.0f); }
+    float consumeInputPeakRight() noexcept { return inputPeakR.exchange (0.0f); }
     float consumePeakLeft() noexcept    { return outputPeakL.exchange (0.0f); }
     float consumePeakRight() noexcept   { return outputPeakR.exchange (0.0f); }
     float getLiveEnvFollower() const noexcept { return liveEnvFollowerOut.load (std::memory_order_relaxed); }
@@ -202,16 +211,6 @@ public:
     float getHostBpm() const noexcept            { return currentBpm.load (std::memory_order_relaxed); }
     double getCurrentSampleRateHz() const noexcept { return currentSampleRateHz.load (std::memory_order_relaxed); }
     bool consumeMidiActivity() noexcept          { return midiActivityFlag.exchange (false); }
-
-    void copyScopeSamples (std::array<float, scopeBufferSize>& dest) const noexcept
-    {
-        const int writeIdx = scopeWritePos.load (std::memory_order_acquire);
-        for (int i = 0; i < scopeBufferSize; ++i)
-        {
-            const int srcIdx = (writeIdx + i) % scopeBufferSize;
-            dest[static_cast<size_t> (i)] = scopeRingBuffer[static_cast<size_t> (srcIdx)].load (std::memory_order_relaxed);
-        }
-    }
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -347,9 +346,14 @@ private:
     std::atomic<bool> mixLockEnabled    { false };
     std::atomic<bool> globalSyncEnabled { false };
 
+    std::atomic<bool> tailsEnabled      { true };
+    std::atomic<bool> linkABEnabled     { false };
+    std::atomic<bool> muteInEnabled     { false };
+
     std::atomic<double> currentSampleRateHz { 44100.0 };
     std::atomic<float>  currentBpm          { 120.0f };
-    std::atomic<float>  inputPeakLevel      { 0.0f };
+    std::atomic<float>  inputPeakL          { 0.0f };
+    std::atomic<float>  inputPeakR          { 0.0f };
     std::atomic<float>  outputPeakL         { 0.0f };
     std::atomic<float>  outputPeakR         { 0.0f };
     std::atomic<float>  liveEnvFollowerOut  { 0.0f };
@@ -357,10 +361,6 @@ private:
     std::atomic<float>  liveLfo2Out         { 0.0f };
     std::atomic<float>  liveEffectiveMorph  { 0.5f };
     std::atomic<bool>   midiActivityFlag    { false };
-
-    std::array<std::atomic<float>, scopeBufferSize> scopeRingBuffer {};
-    std::atomic<int> scopeWritePos { 0 };
-    int scopeDecimator = 0;
 
     std::array<std::atomic<int>, numAssignKnobs>   assignKnobMidiCC {};
     std::atomic<int>                               midiLearnTargetSlot   { -1 };
