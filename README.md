@@ -1,4 +1,5 @@
 # Cyberverb X1
+
 Open Source VST3 / AU audio effect
 
 <img width="2244" height="1256" alt="Screenshot_CyberverbX1" src="https://github.com/user-attachments/assets/e33a6b54-459f-438f-89ee-d0f2d847ad6e" />
@@ -36,3 +37,114 @@ Open Source VST3 / AU audio effect
   * **FLUSH:** Instantly clears all active delay and reverb buffers.
 * **Direct Numeric Keypad & MIDI Learn:** Enter exact parameter values via the on-screen 10-key pad or hardware keyboard, and assign MIDI CCs (with **Soft-Takeover / Pickup** and **Relative Encoder** support) to the 8 main engine performance knobs.
 * **Dual Stereo Metering & Preset Manager:** Real-time `IN` and `OUT` L/R peak meters with peak-hold indicators, plus an XML-based preset browser supporting Factory and User categories.
+
+---
+
+## Building from Source
+
+Cyberverb X1 uses **CMake** (3.22+) and automatically fetches **JUCE 8.0.4** via `FetchContent` during the initial configuration step.
+
+### Prerequisites (All Platforms)
+* **Git**
+* **CMake** `3.22` or newer
+* A C++20-compatible compiler (Apple Clang, GCC/Clang, or MSVC 2022)
+
+---
+
+### macOS (Apple Silicon & Intel)
+
+#### 1. Install Build Tools
+Install Xcode Command Line Tools and CMake (via [Homebrew](https://brew.sh/)):
+```bash
+xcode-select --install
+brew install cmake
+```
+
+#### 2. Configure & Build (Universal Binary)
+```bash
+git clone https://github.com/NetAndif/cyberverb-x1.git
+cd cyberverb-x1
+
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+cmake --build build --config Release -j
+```
+
+#### 3. Install Plugins & Standalone App
+The compiled artifacts are located in `build/CyberverbX1_artefacts/Release/`:
+```bash
+cp -R "build/CyberverbX1_artefacts/Release/VST3/CyberverbX1.vst3" ~/Library/Audio/Plug-Ins/VST3/
+cp -R "build/CyberverbX1_artefacts/Release/AU/CyberverbX1.component" ~/Library/Audio/Plug-Ins/Components/
+cp -R "build/CyberverbX1_artefacts/Release/Standalone/CyberverbX1.app" /Applications/
+```
+
+#### 4. macOS Gatekeeper & Unsigned App Notice
+Pre-built GitHub releases (or bundles copied from another Mac) are **ad-hoc signed** and not notarized with an Apple Developer ID certificate. When launching the Standalone app or scanning the VST3/AU plugins in your DAW for the first time, macOS Gatekeeper may show a warning (*"Cyberverb X1 cannot be opened because the developer cannot be verified"* or *"is damaged and can't be opened"*).
+
+To allow macOS to run the unsigned binaries, remove the quarantine attribute in Terminal:
+```bash
+xattr -cr "/Applications/CyberverbX1.app"
+xattr -cr ~/Library/Audio/Plug-Ins/VST3/"CyberverbX1.vst3"
+xattr -cr ~/Library/Audio/Plug-Ins/Components/"CyberverbX1.component"
+```
+Alternatively, open **System Settings → Privacy & Security**, scroll down to the **Security** section, and click **Open Anyway** / **Allow Anyway** next to the blocked Cyberverb X1 entry.
+
+*(Note: After installing a new Audio Unit `.component` on macOS, you may need to log out and back in—or run `killall -9 AudioComponentRegistrar`—for Logic Pro / GarageBand to recognize the new AU plugin.)*
+
+---
+
+### Ubuntu / Debian Linux
+
+#### 1. Install Dependencies
+Install the required compiler toolchain and JUCE Linux development libraries (X11, ALSA, FreeType, WebKit/GTK, cURL):
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake git pkg-config \
+    libasound2-dev libjack-jackd2-dev \
+    libfreetype6-dev libfontconfig1-dev \
+    libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+    libxinerama-dev libxrandr-dev libxrender-dev \
+    libgl1-mesa-dev libglu1-mesa-dev \
+    libgtk-3-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev
+```
+*(Note: On older Ubuntu releases such as 22.04 LTS, replace `libwebkit2gtk-4.1-dev` with `libwebkit2gtk-4.0-dev`.)*
+
+#### 2. Configure & Build
+```bash
+git clone https://github.com/NetAndif/cyberverb-x1.git
+cd cyberverb-x1
+
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j$(nproc)
+```
+
+#### 3. Install VST3 & Standalone Binary
+```bash
+mkdir -p ~/.vst3 ~/.local/bin
+cp -r "build/CyberverbX1_artefacts/Release/VST3/CyberverbX1.vst3" ~/.vst3/
+cp "build/CyberverbX1_artefacts/Release/Standalone/CyberverbX1" ~/.local/bin/
+```
+
+---
+
+### Windows (10 / 11)
+
+#### 1. Install Build Tools
+* Install **Visual Studio 2022** (Community Edition is sufficient) with the **"Desktop development with C++"** workload selected.
+* Install **CMake** (or use the CMake version bundled with Visual Studio) and **Git for Windows**.
+
+#### 2. Configure & Build (PowerShell or x64 Native Tools Command Prompt)
+```powershell
+git clone https://github.com/NetAndif/cyberverb-x1.git
+cd cyberverb-x1
+
+cmake -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release --parallel
+```
+
+#### 3. Install VST3 & Standalone Executable
+Copy the build outputs from `build\CyberverbX1_artefacts\Release\`:
+* **VST3 Plugin:** Copy `CyberverbX1.vst3` to `C:\Program Files\Common Files\VST3\`
+* **Standalone App:** Copy `CyberverbX1.exe` to any folder of your choice (e.g., `C:\Program Files\Cyberverb<img width="1024" height="1024" alt="icon" src="https://github.com/user-attachments/assets/f04e9184-7119-4496-8ac9-b1d1e413dd11" />
+X1\`)
+
+*(Note: If Windows Defender SmartScreen displays a warning on unsigned standalone builds, click **More info → Run anyway**.)*
