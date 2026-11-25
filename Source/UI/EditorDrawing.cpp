@@ -92,13 +92,13 @@ void CyberverbX1AudioProcessorEditor::drawSystemButtonLeds (juce::Graphics& g, f
     };
 
     const float r       = 0.0042f * w;
-    const float yOffset = 0.0200f * h; // Exakt gleicher Abstand wie beim FREEZE-Button
+    const float yOffset = 0.0350f * h;
 
     for (size_t i = 0; i < 4; ++i)
     {
         const auto b   = systemButtons[i].getBounds().toFloat();
         const float cx = b.getCentreX();
-        const float cy = b.getBottom() + yOffset;
+        const float cy = b.getY() - yOffset;
 
         if (states[i])
         {
@@ -125,7 +125,7 @@ void CyberverbX1AudioProcessorEditor::drawMatrixLeds (juce::Graphics& g, float w
 {
     constexpr float ledX[4] = { 0.4976f, 0.5369f, 0.5762f, 0.6173f };
     const float topLedY = 0.6140f * h;
-    const float botLedY = matrixButtons[6].getBounds().toFloat().getBottom() + 0.0160f * h;
+    const float botLedY = matrixButtons[6].getBounds().toFloat().getY() - 0.0300f * h;
     const float r = 0.0042f * w;
 
     const bool aOn    = audioProcessor.apvts.getRawParameterValue ("a_on")->load() > 0.5f;

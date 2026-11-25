@@ -925,7 +925,11 @@ void CyberverbX1AudioProcessor::installFactoryPresets (bool overwriteExisting)
 
         if (auto xml = juce::XmlDocument::parse (juce::String::fromUTF8 (rawData, dataSize)))
         {
-            if (! xml->hasTagName (apvts.state.getType())) continue;
+            if (! xml->hasTagName (apvts.state.getType()) && ! xml->hasTagName ("PARAMETERS"))
+                continue;
+
+            xml->setTagName (apvts.state.getType());
+
             const auto presetName = xml->getStringAttribute ("presetName",
                 juce::File::createFileWithoutCheckingPath (origName).getFileNameWithoutExtension());
             const auto targetFile = factoryRoot.getChildFile (juce::File::createLegalFileName (presetName) + ".xml");

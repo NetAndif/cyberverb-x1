@@ -510,18 +510,52 @@ bool CyberverbX1AudioProcessorEditor::keyPressed (const juce::KeyPress& key)
 void CyberverbX1AudioProcessorEditor::refreshPresetList()
 {
     suppressPresetBoxCallback = true;
+
     presetBox.clear (juce::dontSendNotification);
     cachedPresetEntries = audioProcessor.getAllPresetEntries();
 
-    int matchId = 1;
+    auto* rootMenu = presetBox.getRootMenu();
+    rootMenu->clear();
+
+    const auto curName = audioProcessor.getCurrentPresetName();
+    const auto curCat  = audioProcessor.getCurrentPresetCategory();
+    int selectedItemId = 0;
+
+    std::map<juce::String, juce::PopupMenu> categoryMenus;
+    juce::StringArray categoryOrder;
+
     for (int i = 0; i < cachedPresetEntries.size(); ++i)
     {
-        const auto& e = cachedPresetEntries.getReference (i);
-        presetBox.addItem (e.name, i + 1);
-        if (e.name.equalsIgnoreCase (audioProcessor.getCurrentPresetName()))
-            matchId = i + 1;
+        const auto& entry  = cachedPresetEntries.getReference (i);
+        const int itemId   = i + 1;
+        const bool isTicked = (entry.name == curName && entry.category == curCat);
+
+        if (isTicked)
+            selectedItemId = itemId;
+
+        if (entry.category.isEmpty() || entry.isInit)
+        {
+            rootMenu->addItem (itemId, entry.name, true, isTicked);
+        }
+        else
+        {
+            if (! categoryOrder.contains (entry.category))
+                categoryOrder.add (entry.category);
+
+            categoryMenus[entry.category].addItem (itemId, entry.name, true, isTicked);
+        }
     }
-    presetBox.setSelectedId (matchId, juce::dontSendNotification);
+
+    for (const auto& cat : categoryOrder)
+        rootMenu->addSubMenu (cat, categoryMenus[cat]);
+
+    if (selectedItemId > 0)
+        presetBox.setSelectedId (selectedItemId, juce::dontSendNotification);
+    else if (curName.isNotEmpty())
+        presetBox.setText (curName, juce::dontSendNotification);
+    else
+        presetBox.setText ("Init", juce::dontSendNotification);
+
     suppressPresetBoxCallback = false;
 }
 
@@ -569,14 +603,64 @@ void CyberverbX1AudioProcessorEditor::handleLoadPresetClick()
     });
 }
 
-void CyberverbX1AudioProcessorEditor::handleRenameOrMovePresetClick() {}
+void CyberverbX1AudioProcessorEditor::handleRenameOrMovePresetClick()
+{
+    if (! audioProcessor.isCurrentPresetSaved() || audioProcessor.isCurrentPresetFactory())
+        return;
+
+    auto* alert = new juce::AlertWindow ("CYBERVERB X1 // RENAME OR MOVE",
+                                         "Update preset name or category folder:",
+                                         juce::MessageBoxIconType::NoIcon);
+
+    alert->addTextEditor ("name", audioProcessor.getCurrentPresetName(), "Preset Name:");
+
+    const auto currentCat = audioProcessor.getCurrentPresetCategory();
+    alert->addTextEditor ("cat", currentCat.isEmpty() ? "User" : currentCat, "Category:");
+
+    alert->addButton ("Apply", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    alert->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    alert->enterModalState (true, juce::ModalCallbackFunction::create ([this, alert] (int res)
+    {
+        if (res == 1)
+        {
+            const auto newName = alert->getTextEditorContents ("name").trim();
+            const auto newCat  = alert->getTextEditorContents ("cat").trim();
+
+            if (newName.isNotEmpty() && audioProcessor.renameOrMoveCurrentUserPreset (newName, newCat))
+            {
+                refreshPresetList();
+                triggerLcdNotification ("PRESET UPDATED", newName);
+            }
+            else
+            {
+                triggerLcdNotification ("RENAME FAILED", "INVALID NAME");
+            }
+        }
+    }), true);
+}
 void CyberverbX1AudioProcessorEditor::handleDeletePresetClick()
 {
-    if (audioProcessor.deleteCurrentUserPreset())
-    {
-        refreshPresetList();
-        triggerLcdNotification ("PRESET", "DELETED");
-    }
+    if (! audioProcessor.isCurrentPresetSaved() || audioProcessor.isCurrentPresetFactory())
+        return;
+
+    const auto nameToDelete = audioProcessor.getCurrentPresetName();
+
+    juce::AlertWindow::showOkCancelBox (
+        juce::MessageBoxIconType::WarningIcon,
+        "CYBERVERB X1 // DELETE PRESET",
+        "Move user preset '" + nameToDelete + "' to trash?",
+        "Delete",
+        "Cancel",
+        this,
+        juce::ModalCallbackFunction::create ([this] (int res)
+        {
+            if (res == 1 && audioProcessor.deleteCurrentUserPreset())
+            {
+                refreshPresetList();
+                triggerLcdNotification ("PRESET", "DELETED");
+            }
+        }));
 }
 void CyberverbX1AudioProcessorEditor::handleRestoreFactoryPresetsClick() { audioProcessor.restoreFactoryPresets(); refreshPresetList(); }
 
@@ -667,6 +751,12 @@ void CyberverbX1AudioProcessorEditor::showSettingsMenu()
     menu.addSectionHeader ("CYBERVERB X1 // SYSTEM");
     menu.addItem (1, "Init Patch (Reset)");
     menu.addItem (2, "Open Presets Folder...");
+    const bool canModifyPreset = audioProcessor.isCurrentPresetSaved()
+                            && ! audioProcessor.isCurrentPresetFactory();
+    menu.addSectionHeader ("Preset Management");
+    menu.addItem (5, "Save Preset...", true);
+    menu.addItem (6, "Rename / Move Current Preset...", canModifyPreset);
+    menu.addItem (7, "Delete Current Preset...", canModifyPreset);
     menu.addSeparator();
     menu.addItem (10, "Soft-Takeover (MIDI Pickup)", true, audioProcessor.isMidiPickupEnabled());
     menu.addItem (11, "Save MIDI Mappings...");
@@ -684,6 +774,9 @@ void CyberverbX1AudioProcessorEditor::showSettingsMenu()
         {
             case 1:  audioProcessor.loadInitPatch(); refreshPresetList(); triggerLcdNotification ("SYSTEM", "INIT LOADED"); break;
             case 2:  audioProcessor.getPresetDirectory().revealToUser(); break;
+            case 5:  handleSavePresetClick (true); break;
+            case 6:  handleRenameOrMovePresetClick(); break;
+            case 7:  handleDeletePresetClick(); break;
             case 10: audioProcessor.setMidiPickupEnabled (! audioProcessor.isMidiPickupEnabled()); break;
             case 11: handleSaveMidiMappingClick(); break;
             case 12: handleLoadMidiMappingClick(); break;

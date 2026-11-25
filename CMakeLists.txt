@@ -31,6 +31,9 @@ FetchContent_MakeAvailable(juce)
 
 # Grafik-Assets & eingebettete Factory-Presets in Binary-Data kompilieren
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Assets")
+    file(GLOB_RECURSE FACTORY_PRESET_FILES CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/Assets/FactoryPresets/*.xml"
+    )
     juce_add_binary_data(CyberverbAssets
         SOURCES
             Assets/background_main.png
@@ -41,6 +44,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Assets")
             Assets/tab_eq.png
             Assets/tab_matrix.png
             Assets/Rajdhani-SemiBold.ttf
+            ${FACTORY_PRESET_FILES}
     )
     set_target_properties(CyberverbAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif()
