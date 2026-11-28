@@ -1016,10 +1016,11 @@ void CyberverbX1AudioProcessorEditor::mouseDown (const juce::MouseEvent& event)
 
     if (event.mods.isRightButtonDown())
     {
-        const float relX = event.position.x / static_cast<float> (getWidth());
-        const float relY = event.position.y / static_cast<float> (getHeight());
+        //const float relX = event.position.x / static_cast<float> (getWidth());
+        //const float relY = event.position.y / static_cast<float> (getHeight());
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon,
-            "CyberverbX1 Koordinaten-Helfer",
-            juce::String::formatted ("Pixel: %d, %d\nRelativ: %.4ff, %.4ff", event.x, event.y, relX, relY));
+            "About CyberverbX1",
+            //juce::String::formatted ("Pixel: %d, %d\nRelativ: %.4ff, %.4ff", event.x, event.y, relX, relY));
+            juce::String::formatted ("CyberverbX1 Develeopment Release"));
     }
 }

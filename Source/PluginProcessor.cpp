@@ -932,7 +932,25 @@ void CyberverbX1AudioProcessor::installFactoryPresets (bool overwriteExisting)
 
             const auto presetName = xml->getStringAttribute ("presetName",
                 juce::File::createFileWithoutCheckingPath (origName).getFileNameWithoutExtension());
-            const auto targetFile = factoryRoot.getChildFile (juce::File::createLegalFileName (presetName) + ".xml");
+
+            // Unterordner aus presetCategory auslesen (z. B. "Factory/Reverb" -> "Reverb")
+            const auto rawCategory = xml->getStringAttribute ("presetCategory", "Factory").trim();
+            juce::File targetDir = factoryRoot;
+
+            if (rawCategory.startsWithIgnoreCase ("Factory/"))
+            {
+                const auto subPath = rawCategory.fromFirstOccurrenceOf ("/", false, false).trim();
+                for (const auto& segment : juce::StringArray::fromTokens (subPath, "/\\", ""))
+                {
+                    const auto cleanSeg = juce::File::createLegalFileName (segment.trim());
+                    if (cleanSeg.isNotEmpty())
+                        targetDir = targetDir.getChildFile (cleanSeg);
+                }
+            }
+
+            targetDir.createDirectory();
+
+            const auto targetFile = targetDir.getChildFile (juce::File::createLegalFileName (presetName) + ".xml");
             if (overwriteExisting || ! targetFile.existsAsFile())
                 xml->writeTo (targetFile);
         }
