@@ -2,7 +2,7 @@
 
 Open Source VST3 / AU audio effect
 
-<img width="2244" height="1256" alt="Screenshot_CyberverbX1" src="https://github.com/user-attachments/assets/e33a6b54-459f-438f-89ee-d0f2d847ad6e" />
+<img width="1405" height="793" alt="Screenshot_CyberverbX1" src="https://github.com/user-attachments/assets/61094423-49d5-4d3a-a8b1-9ed6aecfd9e7" />
 <br/><br/>
 **Cyberverb X1** is a dual-engine hybrid reverb and delay workstation built with JUCE / C++. Designed around two independent, morphable stereo processing spaces (**Space A** and **Space B**), it combines flexible signal routing, tempo-synced delays, modulated reverb tanks, internal dynamics, and real-time modulation in a unified hardware-inspired interface.
 
